@@ -4,30 +4,24 @@
 # @File    : mf.py
 import torch
 from torch import nn
-from torch.nn.init import xavier_normal_
 
 
-class MatrixFactorization(nn.Module):
-
-    def __init__(self, num_users: int, num_items: int, embedding_size: int):
+class LogisticRegression(nn.Module):
+    def __init__(self, num_feature: int):
         super().__init__()
+        # 特征向量参数w和b
+        self.linear = nn.Linear(num_feature, 1, True)
 
-        # 用户和物品的embedding
-        self.user_embeddings = nn.Embedding(num_users, embedding_size)
-        self.item_embeddings = nn.Embedding(num_items, embedding_size)
+    def forward(self, feature_vector: torch.Tensor) -> torch.Tensor:
+        return torch.sigmoid(self.linear(feature_vector))
 
-        # embedding初始化
-        xavier_normal_(self.user_embeddings.weight.data)
-        xavier_normal_(self.item_embeddings.weight.data)
-
-    def forward(self, user_indices: torch.Tensor, item_indices: torch.Tensor) -> torch.Tensor:
-        user_embedding = self.user_embeddings(user_indices)
-        item_embedding = self.item_embeddings(item_indices)
-        return torch.sigmoid(torch.sum(torch.multiply(user_embedding, item_embedding), dim=1))
-
-    def recommendation(self, num_users, num_items, k):
-        user_vector = self.user_embeddings(torch.arange(num_users))
-        item_vector = self.item_embeddings(torch.arange(num_items))
-        ratings_matrix = torch.matmul(user_vector, item_vector.T)
-        values, indices = torch.topk(ratings_matrix, k, dim=1)
-        return indices.cpu().numpy()
+    def recommendation(self, num_users, user_item, k):
+        array = []
+        for i in range(num_users):
+            user_vector = user_item[user_item['user_id'] == i]
+            user_vector = torch.Tensor(user_vector.iloc[:, 2:].values)
+            scores = self.forward(user_vector)
+            values, indices = torch.topk(scores, k, dim=0)
+            indices = indices.view(1, -1).tolist()[0]
+            array.append(indices)
+        return array
