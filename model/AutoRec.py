@@ -12,3 +12,13 @@ class AutoRec(nn.Module):
         hidden = torch.sigmoid(self.encoder(x))
         output = torch.sigmoid(self.decoder(hidden))
         return output
+
+    def recommendation(self, rating_matrix, k):
+        prediction = self.forward(rating_matrix)
+        values, indices = torch.topk(prediction, k, dim=1)
+        return indices.cpu().numpy()
+
+    def i_recommendation(self, rating_matrix, k):
+        prediction = self.forward(rating_matrix)
+        values, indices = torch.topk(prediction, k, dim=0)
+        return indices.cpu().numpy()
