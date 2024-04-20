@@ -1,55 +1,68 @@
 import torch
 from torch import nn
-from torch.nn.init import xavier_normal_
 
 
 class FFM(nn.Module):
-    def __init__(self, num_feature: int):  # 隐向量维度
+    def __init__(self, num_feature: int, num_vector: int):  # 特征维度、隐向量维度
         super().__init__()
 
-        # 特征的特征域的embedding
-        self.movie_age = nn.Embedding(1, num_feature)
-        self.movie_gender = nn.Embedding(1, num_feature)
-        self.movie_occupation = nn.Embedding(1, num_feature)
-        self.age_movie = nn.Embedding(1, num_feature)
-        self.age_gender = nn.Embedding(1, num_feature)
-        self.age_occupation = nn.Embedding(1, num_feature)
-        self.gendr_movie = nn.Embedding(1, num_feature)
-        self.gendr_age = nn.Embedding(1, num_feature)
-        self.gendr_occupation = nn.Embedding(1, num_feature)
-        self.occupation_movie = nn.Embedding(1, num_feature)
-        self.occupation_age = nn.Embedding(1, num_feature)
-        self.occupation_gender = nn.Embedding(1, num_feature)
+        # 特征向量参数w和b
+        self.linear = nn.Linear(num_feature, 1, True)
 
-        # embedding初始化
-        xavier_normal_(self.movie_age.weight.data)
-        xavier_normal_(self.movie_gender.weight.data)
-        xavier_normal_(self.movie_occupation.weight.data)
-        xavier_normal_(self.age_movie.weight.data)
-        xavier_normal_(self.age_gender.weight.data)
-        xavier_normal_(self.age_occupation.weight.data)
-        xavier_normal_(self.gendr_movie.weight.data)
-        xavier_normal_(self.gendr_age.weight.data)
-        xavier_normal_(self.gendr_occupation.weight.data)
-        xavier_normal_(self.occupation_movie.weight.data)
-        xavier_normal_(self.occupation_age.weight.data)
-        xavier_normal_(self.occupation_gender.weight.data)
+        # 特征特征域的隐向量
+        self.movie_age = nn.Parameter(torch.randn(1, num_vector))
+        self.movie_gender = nn.Parameter(torch.randn(1, num_vector))
+        self.movie_occupation = nn.Parameter(torch.randn(1, num_vector))
+        self.age_movie = nn.Parameter(torch.randn(1, num_vector))
+        self.age_gender = nn.Parameter(torch.randn(1, num_vector))
+        self.age_occupation = nn.Parameter(torch.randn(1, num_vector))
+        self.gendr_movie = nn.Parameter(torch.randn(1, num_vector))
+        self.gendr_age = nn.Parameter(torch.randn(1, num_vector))
+        self.gendr_occupation = nn.Parameter(torch.randn(1, num_vector))
+        self.occupation_movie = nn.Parameter(torch.randn(1, num_vector))
+        self.occupation_age = nn.Parameter(torch.randn(1, num_vector))
+        self.occupation_gender = nn.Parameter(torch.randn(1, num_vector))
 
-    def forward(self, movie_age: torch.Tensor, movie_gender: torch.Tensor, movie_occupation: torch.Tensor,
-                age_gender: torch.Tensor, age_occupation: torch.Tensor, gendr_occupation: torch.Tensor):
-        movie_age_weight = torch.matmul(self.movie_age.weight, self.age_movie.weight.t())
-        movie_gender_weight = torch.matmul(self.movie_gender.weight, self.gendr_movie.weight.t())
-        movie_occupation_weight = torch.matmul(self.movie_occupation.weight, self.occupation_movie.weight.t())
-        age_gender_weight = torch.matmul(self.age_gender.weight, self.gendr_age.weight.t())
-        age_occupation_weight = torch.matmul(self.age_occupation.weight, self.occupation_age.weight.t())
-        gendr_occupation_weight = torch.matmul(self.gendr_occupation.weight, self.occupation_age.weight.t())
+    def forward(self, feature_vector: torch.Tensor) -> torch.Tensor:
+        # 特征交叉的权重
+        movie_age_weight = torch.matmul(self.movie_age, self.age_movie.t())
+        movie_gender_weight = torch.matmul(self.movie_gender, self.gendr_movie.t())
+        movie_occupation_weight = torch.matmul(self.movie_occupation, self.occupation_movie.t())
+        age_gender_weight = torch.matmul(self.age_gender, self.gendr_age.t())
+        age_occupation_weight = torch.matmul(self.age_occupation, self.occupation_age.t())
+        gendr_occupation_weight = torch.matmul(self.gendr_occupation, self.occupation_age.t())
+
+        # 特征交叉
+        list1 = [0] + list(range(24, 43))
+        movie_age = feature_vector[:, list1]
+        list2 = [1, 2] + list(range(24, 43))
+        movie_gender = feature_vector[:, list2]
+        list3 = list(range(3, 43))
+        movie_occupation = feature_vector[:, list3]
+        list4 = [0, 1, 2]
+        age_gender = feature_vector[:, list4]
+        list5 = [0] + list(range(3, 24))
+        age_occupation = feature_vector[:, list5]
+        list6 = list(range(1, 24))
+        gendr_occupation = feature_vector[:, list6]
+
         return torch.sigmoid(
-            torch.matmul(movie_age, movie_age_weight.expand(20, 1)) + torch.matmul(movie_gender,
-                                                                                   movie_gender_weight.expand(20,
-                                                                                                              1)) + torch.matmul(
-                movie_occupation, movie_occupation_weight.expand(20, 1)) + torch.matmul(age_gender,
-                                                                                        age_gender_weight.expand(2,
-                                                                                                                 1)) + torch.matmul(
-                age_occupation, age_occupation_weight.expand(2, 1)) + torch.matmul(gendr_occupation,
-                                                                                   gendr_occupation_weight.expand(2,
-                                                                                                                  1)))
+            self.linear(feature_vector) + torch.matmul(movie_age, movie_age_weight.expand(20, 1)) + torch.matmul(
+                movie_gender, movie_gender_weight.expand(21, 1)) + torch.matmul(movie_occupation,
+                                                                                movie_occupation_weight.expand(40,
+                                                                                                               1)) + torch.matmul(
+                age_gender, age_gender_weight.expand(3, 1)) + torch.matmul(age_occupation,
+                                                                           age_occupation_weight.expand(22,
+                                                                                                        1)) + torch.matmul(
+                gendr_occupation, gendr_occupation_weight.expand(23, 1)))
+
+    def recommendation(self, num_users, user_item, k):
+        array = []
+        for i in range(num_users):
+            user_vector = user_item[user_item['user_id'] == i]
+            user_vector = torch.Tensor(user_vector.iloc[:, 2:].values)
+            scores = self.forward(user_vector)
+            values, indices = torch.topk(scores, k, dim=0)
+            indices = indices.view(1, -1).tolist()[0]
+            array.append(indices)
+        return array
