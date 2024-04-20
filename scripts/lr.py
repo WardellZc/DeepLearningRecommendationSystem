@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch.nn
 from torch import optim
 
@@ -8,75 +9,84 @@ sys.path.append('../')
 
 from data.reader import MovieLens100K
 from model.lr import LogisticRegression
+from sampler.sampler import Sampler
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 data = MovieLens100K('../dataset_example/ml-100k')
-train_data, test_data, user_item = data.feature_data('../dataset_example/ml-100k')
 
-train_list = train_data  # 提取训练集物品id
-test_list = test_data  # 提取测试集物品id
-train_data = train_data[:, 3:]  # 筛选训练数据
-train_real = train_data[:, 2].view(-1, 1)  # 训练集真实评分数据，用于计算损失
-test_data = test_data[:, 3:]  # 筛选测试数据
-test_real = test_data[:, 2].view(-1, 1)  # 测试集真实评分数据，用于计算损失
-model = LogisticRegression(train_data.shape[1], 1)
+# 负采样
+# 将训练集、验证集、测试集中存在的用户-项目对得出
+train_set = set(data.train.apply(lambda row: (row['user_id'], row['item_id']), axis=1))
+validation_set = set(data.validation.apply(lambda row: (row['user_id'], row['item_id']), axis=1))
+test_set = set(data.test.apply(lambda row: (row['user_id'], row['item_id']), axis=1))
+excluded_pairs = train_set | validation_set | test_set
+# 生成训练集负样本，并合并数据
+train_sampler = Sampler()
+train_negative = train_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 10)  # 生成用户、项目、评分数据
+train_negative = pd.merge(train_negative, data.user_data, on='user_id')  # 将负样本也连接上用户和物品信息
+train_negative = pd.merge(train_negative, data.item_data, on='item_id')
+train_combined = pd.concat([data.train, train_negative], axis=0).reset_index(drop=True)  # 合并正负样本
+# 生成验证集负样本，并合并数据
+validation_sampler = Sampler()
+validation_negative = validation_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 10)
+validation_negative = pd.merge(validation_negative, data.user_data, on='user_id')
+validation_negative = pd.merge(validation_negative, data.item_data, on='item_id')
+validation_combined = pd.concat([data.validation, validation_negative], axis=0).reset_index(drop=True)
+# 生成测试集负样本，并合并数据
+test_sampler = Sampler()
+test_negative = test_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 10)
+test_negative = pd.merge(test_negative, data.user_data, on='user_id')
+test_negative = pd.merge(test_negative, data.item_data, on='item_id')
+test_combined = pd.concat([data.test, test_negative], axis=0).reset_index(drop=True)
+
+# 生成训练集、验证集、测试集的训练特征向量以及评分的torch
+train_data = torch.tensor(train_combined.iloc[:, 3:].values, dtype=torch.float32)  # 去除user_di、item_id、rating
+train_rating = torch.tensor(train_combined.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1)  # 评分数据，用于计算损失
+validation_data = torch.tensor(validation_combined.iloc[:, 3:].values, dtype=torch.float32)
+validation_rating = torch.tensor(validation_combined.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1)
+test_data = torch.tensor(test_combined.iloc[:, 3:].values, dtype=torch.float32)
+test_rating = torch.tensor(test_combined.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1)
+
+model = LogisticRegression(train_data.shape[1])
 loss_fn = torch.nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 
+# 模型训练
 epochs = 50
 for epoch in range(epochs):
     model.train()
     optimizer.zero_grad()
-    predictions = model(train_data)
-    loss = loss_fn(predictions, train_real)
-    loss.backward()
+    train_predictions = model(train_data)
+    train_loss = loss_fn(train_predictions, train_rating)
+    train_loss.backward()
     optimizer.step()
 
     model.eval()
     with torch.no_grad():
-        predictions_test = model(test_data)
-        test_loss = loss_fn(predictions_test, test_real)
-    print(f'Epoch {epoch + 1}: Training loss: {loss.item()} Test Loss: {test_loss.item()}')
+        validation_predictions = model(validation_data)
+        validation_loss = loss_fn(validation_predictions, validation_rating)
+        if epoch < epochs - 1:
+            print(f'Epoch {epoch + 1}: Training loss: {train_loss.item()} Validation Loss: {validation_loss.item()}')
+        else:
+            test_predictions = model(test_data)
+            test_loss = loss_fn(test_predictions, test_rating)
+            print(
+                f'Epoch {epoch + 1}: Training loss: {train_loss.item()} Validation Loss: {validation_loss.item()} Test Loss: {test_loss.item()}')
+
+# 推荐部分
+recommendation = model.recommendation(data.num_users, data.user_item, 100)
+same = 0.0
+p = 0.0
+r = 0.0
+for i in range(data.num_users):
+    real_list = data.data[data.data['user_id'] == i]['item_id'].values  # 用户真实评过分的物品id列表
+    recommendation_list = recommendation[i]  # 用户的推荐列表
+    same += len(set(real_list) & set(recommendation_list))
+    p += len(recommendation_list)  # 推荐总数
+    r += len(real_list)  # 用户真实评过分的物品数目
+precision = same / p
+recall = same / r
+f1 = 2*precision*recall/(precision+recall)
+print(f'Precision: {precision},Recall: {recall},F1: {f1}')
 
 
-def recommendation(user_id, user_item, k):
-    user_vector = user_item[user_item[:, 0] == user_id]
-    list_indices = [1, 2, 3] + list(range(5, 24))
-    user_vector = user_vector[:, list_indices]
-    pre = torch.matmul(user_vector, model.W.weight) + model.B.weight
-
-    # 推荐列表（去除训练样本中的正负样本）
-    # 得到预测推荐列表
-    pre = pre.detach().numpy()
-    indices = np.argsort(-pre, axis=0).tolist()
-    indices = [x + 1 for sublist in indices for x in sublist]  # 将索引+1变为物品id
-
-    # 得到训练集中的物品id，去除它得到推荐列表
-    train_indices = train_list[train_list[:, 0] == user_id][:, 1].tolist()
-    recommendation_list = [x for x in indices if x not in train_indices][:k]
-
-    # 得到测试集中过的物品id
-    test_indices = test_list[test_list[:, 0] == user_id][:, 1].tolist()
-    test_indices = [int(x) for x in test_indices]
-
-    return recommendation_list, test_indices
-
-
-recommendation_list, test_indices = recommendation(1, user_item, 20)
-
-k = 20
-pr = 0.0
-re = 0.0
-f1 = 0.0
-for n_user in range(1, data.num_users + 1):
-    recommendation_list, test_indices = recommendation(n_user, user_item, k)
-    same = set(recommendation_list) & set(test_indices)
-    pr += len(same) / (len(recommendation_list) * 1.0)
-    if len(test_indices) > 0:
-        re += len(same) / (len(test_indices) * 1.0)
-    else:
-        re += 0
-pr = pr / data.num_users
-re = re / data.num_users
-f1 = 2 * pr * re / (pr + re)
-print(f' Precision: {pr} Recall: {re} F1:{f1}')
