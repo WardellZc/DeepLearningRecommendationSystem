@@ -39,32 +39,16 @@ class MovieLens100K:
         ages = self.user_data['age'].values.reshape(-1, 1)
         self.user_data['age'] = scaler.fit_transform(ages)
 
-        # 将评分数据集与用户信息和物品信息连接起来
-        self.data = pd.merge(self.data, self.user_data, on='user_id')
-        self.data = pd.merge(self.data, self.item_data, on='item_id')
-
         # 将数据集转化为隐式数据集
         self.data['rating'] = 1
 
         # 将数据集划分为训练集、验证集、测试集
         self.data = self.data.sample(frac=1).reset_index(drop=True)  # 打乱数据
         train_size = int(len(self.data) * 0.6)  # 计算分割点
-        validation_size = int(len(self.data) * 0.2)
+        valid_size = int(len(self.data) * 0.2)
         self.train = self.data[:train_size]
-        self.validation = self.data[train_size:train_size + validation_size]
-        self.test = self.data[train_size + validation_size:]
-
-        # 生成用户数量*物品数量的数据集,没有rating列，前两行为user_id、item_id
-        user = pd.DataFrame({'user_id': range(self.num_users)})
-        item = pd.DataFrame({'item_id': range(self.num_items)})
-        user['key'] = 1
-        item['key'] = 1
-        self.user_item = pd.merge(user, item, on='key').drop('key', axis=1)
-        self.user_item = pd.merge(self.user_item, self.user_data, on='user_id')
-        self.user_item = pd.merge(self.user_item, self.item_data, on='item_id')
-
-        # 生成评分矩阵式的数据集
-        self.rating_matrix = self.data.pivot(index='user_id', columns='item_id', values='rating').fillna(0)
+        self.valid = self.data[train_size:train_size + valid_size]
+        self.test = self.data[train_size + valid_size:]
 
     @staticmethod
     def _interaction(data, device: str = 'cpu') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -76,8 +60,26 @@ class MovieLens100K:
     def train_interaction(self, device: str = 'cpu') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self._interaction(self.train, device)
 
-    def validation_interaction(self, device: str = 'cpu') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        return self._interaction(self.validation, device)
+    def valid_interaction(self, device: str = 'cpu') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return self._interaction(self.valid, device)
 
     def test_interaction(self, device: str = 'cpu') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self._interaction(self.test, device)
+
+    # 将评分数据集与用户信息和物品连接起来
+    def feature(self, data):
+        data = pd.merge(data, self.user_data, on='user_id')
+        data = pd.merge(data, self.item_data, on='item_id')
+        return data
+
+    # 融合用户信息和物品信息的特征数据集
+    def user_item(self):
+        user = pd.DataFrame({'user_id': range(self.num_users)})
+        item = pd.DataFrame({'item_id': range(self.num_items)})
+        user['key'] = 1
+        item['key'] = 1
+        user_item = pd.merge(user, item, on='key').drop('key', axis=1)
+        user_item = pd.merge(user_item, self.user_data, on='user_id')
+        user_item = pd.merge(user_item, self.item_data, on='item_id')
+        return user_item
+
