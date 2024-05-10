@@ -22,7 +22,7 @@ data = MovieLens100K('../dataset_example/ml-100k')
 # 对整体评分进行负采样，这样在数据集划分后，训练集、验证集、测试集中都有负样本
 excluded_pairs = set(data.data.apply(lambda row: (row['user_id'], row['item_id']), axis=1))
 sampler = Sampler()
-negative = sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 50)  # 生成用户、项目、评分数据
+negative = sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 150)  # 生成用户、项目、评分数据
 combined = pd.concat([data.data, negative], axis=0).reset_index(drop=True)  # 合并正负样本
 
 # 构造矩阵数据
@@ -32,32 +32,29 @@ rating_matrix = combined.pivot_table(index='user_id', columns='item_id', values=
 # 先划分为测试集，再从剩下的数据划分出验证集
 train_valid, test = train_test_split(rating_matrix, test_size=0.2, random_state=42)
 train, valid = train_test_split(train_valid, test_size=0.25, random_state=42)
-# 生成掩码,未评分的地方为0，其余为1
-train_mask = train.applymap(lambda x: 0 if x == 0.5 else 1)
-valid_mask = valid.applymap(lambda x: 0 if x == 0.5 else 1)
-test_mask = test.applymap(lambda x: 0 if x == 0.5 else 1)
 
 # 将数据转化为张量
 train = torch.tensor(train.values, dtype=torch.float32).to(device)
 valid = torch.tensor(valid.values, dtype=torch.float32).to(device)
 test = torch.tensor(test.values, dtype=torch.float32).to(device)
-train_mask = torch.tensor(train_mask.values, dtype=torch.float32).to(device)
-valid_mask = torch.tensor(valid_mask.values, dtype=torch.float32).to(device)
-test_mask = torch.tensor(test_mask.values, dtype=torch.float32).to(device)
+# 生成掩码,未评分的地方为False，其余为True
+train_mask = (train != 0.5)
+valid_mask = (valid != 0.5)
+test_mask = (test != 0.5)
 
 # 定义模型
-model = AutoRec(data.num_items, 64)
+model = AutoRec(data.num_items, 256)
 loss_fn = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
+optimizer = optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
 
 # 模型训练
 trainer = Trainer(model, loss_fn, optimizer)
-epochs = 50
+epochs = 100
 for epoch in range(epochs):
-    trainer.train_loop3(train, train_mask)
-    trainer.valid_loop3(valid, valid_mask)
-    trainer.test_loop3(test, test_mask)
-    trainer.model_eval2(epoch)
+    trainer.train_loop2(train, train_mask)
+    trainer.valid_loop2(valid, valid_mask)
+    trainer.test_loop2(test, test_mask)
+    trainer.model_eval(epoch)
 
 # 推荐部分
 rating_matrix = torch.tensor(rating_matrix.values, dtype=torch.float32)
