@@ -18,6 +18,7 @@ from trainer.trainer import Trainer
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 data = MovieLens100K('../dataset_example/ml-100k')
 
+
 # 读取数据
 train_user, train_item, train_rating = data.train_interaction(device=device)
 valid_user, valid_item, valid_rating = data.valid_interaction(device=device)
@@ -33,7 +34,7 @@ train_sampler = Sampler()
 train_negative_users, train_negative_items, train_negative_ratings = train_sampler.negative_sampling(data.num_users,
                                                                                                      data.num_items,
                                                                                                      excluded_pairs,
-                                                                                                     10)
+                                                                                                     180)
 train_users_combined = torch.cat([train_user, train_negative_users]).to(device)
 train_items_combined = torch.cat([train_item, train_negative_items]).to(device)
 train_ratings_combined = torch.cat([train_rating, train_negative_ratings]).to(device)
@@ -42,7 +43,7 @@ valid_sampler = Sampler()
 valid_negative_users, valid_negative_items, valid_negative_ratings = valid_sampler.negative_sampling(data.num_users,
                                                                                                      data.num_items,
                                                                                                      excluded_pairs,
-                                                                                                     10)
+                                                                                                     60)
 valid_users_combined = torch.cat([valid_user, valid_negative_users]).to(device)
 valid_items_combined = torch.cat([valid_item, valid_negative_items]).to(device)
 valid_ratings_combined = torch.cat([valid_rating, valid_negative_ratings]).to(device)
@@ -51,25 +52,23 @@ test_sampler = Sampler()
 test_negative_users, test_negative_items, test_negative_ratings = test_sampler.negative_sampling(data.num_users,
                                                                                                  data.num_items,
                                                                                                  excluded_pairs,
-                                                                                                 10)
+                                                                                                 60)
 test_users_combined = torch.cat([test_user, test_negative_users]).to(device)
 test_items_combined = torch.cat([test_item, test_negative_items]).to(device)
 test_ratings_combined = torch.cat([test_rating, test_negative_ratings]).to(device)
-
 # 定义模型
 model = MatrixFactorization(data.num_users, data.num_items, 64).to(device)
 loss_fn = torch.nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.01)
+optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
 
 # 训练模型
 trainer = Trainer(model, loss_fn, optimizer)
 epochs = 50
 for epoch in range(epochs):
-    trainer.train_loop(train_users_combined, train_items_combined, train_ratings_combined)
-    trainer.valid_loop(valid_users_combined, valid_items_combined, valid_ratings_combined)
-    trainer.test_loop(test_users_combined, test_items_combined, test_ratings_combined)
+    trainer.train_loop(train_users_combined, train_items_combined, train_rating=train_ratings_combined)
+    trainer.valid_loop(valid_users_combined, valid_items_combined, valid_rating=valid_ratings_combined)
+    trainer.test_loop(test_users_combined, test_items_combined, test_rating=test_ratings_combined)
     trainer.model_eval(epoch)
-
 
 # 推荐部分
 recommendation = model.recommendation(data.num_users, data.num_items, 100)  # 得到推荐列表矩阵，每一个行代表给每个用户推荐的物品id
