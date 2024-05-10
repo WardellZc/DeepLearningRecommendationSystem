@@ -25,17 +25,17 @@ test_set = set(data.test.apply(lambda row: (row['user_id'], row['item_id']), axi
 excluded_pairs = train_set | valid_set | test_set
 # 生成训练集负样本，并合并数据
 train_sampler = Sampler()
-train_negative = train_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 10)  # 生成用户、项目、评分数据
+train_negative = train_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 60)  # 生成用户、项目、评分数据
 train_combined = pd.concat([data.train, train_negative], axis=0).reset_index(drop=True)  # 合并正负样本
 train_feature = data.feature(train_combined)  # 将合并后的样本连接上用户和物品信息构成特征数据集
 # 生成验证集负样本，并合并数据
 valid_sampler = Sampler()
-valid_negative = valid_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 10)
+valid_negative = valid_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 20)
 valid_combined = pd.concat([data.valid, valid_negative], axis=0).reset_index(drop=True)  # 合并正负样本
 valid_feature = data.feature(valid_combined)  # 将合并后的样本连接上用户和物品信息构成特征数据集
 # 生成测试集负样本，并合并数据
 test_sampler = Sampler()
-test_negative = test_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 10)
+test_negative = test_sampler.negative_sampling2(data.num_users, data.num_items, excluded_pairs, 20)
 test_combined = pd.concat([data.test, test_negative], axis=0).reset_index(drop=True)  # 合并正负样本
 test_feature = data.feature(test_combined)  # 将合并后的样本连接上用户和物品信息构成特征数据集
 
@@ -48,7 +48,7 @@ test_data = torch.tensor(test_feature.iloc[:, 3:].values, dtype=torch.float32)
 test_rating = torch.tensor(test_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1)
 
 # 定义模型
-model = FFM(32, 32)
+model = FFM(train_data.size(1), 32)
 loss_fn = torch.nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 
@@ -56,9 +56,9 @@ optimizer = optim.Adam(model.parameters(), lr=0.01)
 trainer = Trainer(model, loss_fn, optimizer)
 epochs = 50
 for epoch in range(epochs):
-    trainer.train_loop2(train_data, train_rating)
-    trainer.valid_loop2(valid_data, valid_rating)
-    trainer.test_loop2(test_data, test_rating)
+    trainer.train_loop(train_data, train_rating=train_rating)
+    trainer.valid_loop(valid_data, valid_rating=valid_rating)
+    trainer.test_loop(test_data, test_rating=test_rating)
     trainer.model_eval(epoch)
 
 # 推荐部分
