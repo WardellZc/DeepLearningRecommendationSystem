@@ -83,3 +83,20 @@ class MovieLens100K:
         user_item = pd.merge(user_item, self.item_data, on='item_id')
         return user_item
 
+    # 得到每个用户评过分的物品id矩阵
+    def itemid_matrix(self):
+        # 1. 导入数据
+        df = self.data
+
+        # 2. 生成每个用户评过分的物品ID列表
+        user_item_dict = df.groupby('user_id')['item_id'].apply(list).to_dict()
+
+        # 3. 获取所有用户ID
+        user_ids = sorted(user_item_dict.keys())
+
+        # 4. 将结果转换成矩阵形式
+        user_item_matrix = [user_item_dict[user_id] for user_id in user_ids]
+        return user_item_matrix
+
+
+
