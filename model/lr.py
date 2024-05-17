@@ -4,7 +4,6 @@
 # @File    : mf.py
 import torch
 from torch import nn
-from torch.nn.init import xavier_normal_
 
 
 class LogisticRegression(nn.Module):
@@ -18,9 +17,10 @@ class LogisticRegression(nn.Module):
 
     def recommendation(self, num_users, user_item, k):
         array = []
+        device = next(self.parameters()).device
         for i in range(num_users):
-            user_vector = user_item[user_item['user_id'] == i]
-            user_vector = torch.Tensor(user_vector.iloc[:, 2:].values)
+            user_vector = user_item.iloc[num_users * i:num_users * (i + 1), :]
+            user_vector = torch.Tensor(user_vector.values).to(device)
             scores = self.forward(user_vector)
             values, indices = torch.topk(scores, k, dim=0)
             indices = indices.view(1, -1).tolist()[0]
