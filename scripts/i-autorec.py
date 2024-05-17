@@ -13,6 +13,7 @@ from data.reader import MovieLens100K
 from model.autorec import AutoRec
 from sampler.sampler import Sampler
 from trainer.trainer import Trainer
+from evaluator.ranking import Ranking
 
 # 加载数据
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -43,7 +44,7 @@ valid_mask = (valid != 0.5)
 test_mask = (test != 0.5)
 
 # 定义模型
-model = AutoRec(data.num_users, 256)
+model = AutoRec(data.num_users, 256).to(device)
 loss_fn = nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
 
@@ -57,19 +58,12 @@ for epoch in range(epochs):
     trainer.model_eval(epoch)
 
 # 推荐部分
-rating_matrix = torch.tensor(rating_matrix.values, dtype=torch.float32)
-recommendation = model.i_recommendation(rating_matrix, 100)
-same = 0.0
-p = 0.0
-r = 0.0
-for i in range(data.num_users):
-    real_list = data.data[data.data['user_id'] == i]['item_id'].values  # 用户真实评过分的物品id列表
-    recommendation_list = recommendation[:, i]  # 用户的推荐列表
-    same += len(set(real_list) & set(recommendation_list))
-    p += len(recommendation_list)  # 推荐总数
-    r += len(real_list)  # 用户真实评过分的物品数目
-precision = same / p
-recall = same / r
-f1 = 2*precision*recall/(precision+recall)
-print(f'Precision: {precision},Recall: {recall},F1: {f1}')
+k = 100
+real_list = data.itemid_matrix()
+# 这里要将推荐列表转置，因为原始矩阵行为物品id、列为用户id，要转化为每一个行是为每一个用户推荐的列表，这样计算的指标才对
+rating_matrix = torch.tensor(rating_matrix.values, dtype=torch.float32).to(device)
+roc_list = model.i_recommendation(rating_matrix, k).T
+rank = Ranking(real_list, roc_list, k)
+rank.ranking_eval()
+
 
