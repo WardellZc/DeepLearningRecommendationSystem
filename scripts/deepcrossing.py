@@ -10,6 +10,7 @@ from data.reader import MovieLens100K
 from model.deepcrossing import DeepCrossing
 from sampler.sampler import Sampler
 from trainer.trainer import Trainer
+from evaluator.ranking import Ranking
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 data = MovieLens100K('../dataset_example/ml-100k')
@@ -37,18 +38,21 @@ test_combined = pd.concat([data.test, test_negative], axis=0).reset_index(drop=T
 test_feature = data.feature(test_combined)  # 将合并后的样本连接上用户和物品信息构成特征数据集
 
 # 生成训练集、验证集、测试集的训练特征向量以及评分的torch
-train_data = torch.tensor(train_feature.iloc[:, 3:].values, dtype=torch.float32).to(device)  # 去除user_di、item_id、rating
-train_rating = torch.tensor(train_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)   # 评分数据，用于计算损失
-valid_data = torch.tensor(valid_feature.iloc[:, 3:].values, dtype=torch.float32).to(device)
+train_rating = torch.tensor(train_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)  # 评分数据，用于计算损失
+train_feature.drop('rating', axis=1, inplace=True)  # 去除评分数据
+train_data = torch.tensor(train_feature.values, dtype=torch.float32).to(device)  # 去除rating后的特征数据
 valid_rating = torch.tensor(valid_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)
-test_data = torch.tensor(test_feature.iloc[:, 3:].values, dtype=torch.float32).to(device)
+valid_feature.drop('rating', axis=1, inplace=True)
+valid_data = torch.tensor(valid_feature.values, dtype=torch.float32).to(device)
 test_rating = torch.tensor(test_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)
+test_feature.drop('rating', axis=1, inplace=True)
+test_data = torch.tensor(test_feature.values, dtype=torch.float32).to(device)
 
 # 定义模型
 hidden_units = [256, 128, 64, 32]
-model = DeepCrossing(32, hidden_units)
+model = DeepCrossing(data.num_users, data.num_items, 32, hidden_units).to(device)
 loss_fn = torch.nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
+optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
 # 模型训练
 trainer = Trainer(model, loss_fn, optimizer)
@@ -60,17 +64,10 @@ for epoch in range(epochs):
     trainer.model_eval(epoch)
 
 # 推荐部分
-recommendation = model.recommendation(data.num_users, data.user_item(), 100)
-same = 0.0
-p = 0.0
-r = 0.0
-for i in range(data.num_users):
-    real_list = data.data[data.data['user_id'] == i]['item_id'].values  # 用户真实评过分的物品id列表
-    recommendation_list = recommendation[i]  # 用户的推荐列表
-    same += len(set(real_list) & set(recommendation_list))
-    p += len(recommendation_list)  # 推荐总数
-    r += len(real_list)  # 用户真实评过分的物品数目
-precision = same / p
-recall = same / r
-f1 = 2 * precision * recall / (precision + recall)
-print(f'Precision: {precision},Recall: {recall},F1: {f1}')
+k = 100
+real_list = data.itemid_matrix()
+roc_list = model.recommendation(data.num_users, data.user_item(), k)
+rank = Ranking(real_list, roc_list, k)
+rank.ranking_eval()
+
+
