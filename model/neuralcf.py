@@ -52,9 +52,11 @@ class NeuralCF(nn.Module):
 
     def recommendation(self, num_users, num_items, k):
         array = []
+        # 获取模型参数所在的设备
+        device = next(self.parameters()).device
         for i in range(num_users):
-            user_vector = torch.full((num_items,), i)
-            item_vector = torch.arange(num_items)
+            user_vector = torch.full((num_items,), i).to(device)
+            item_vector = torch.arange(num_items).to(device)
             scores = self.forward(user_vector, item_vector)
             values, indices = torch.topk(scores, k, dim=0)
             indices = indices.view(-1).tolist()
