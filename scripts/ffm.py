@@ -40,27 +40,20 @@ test_negative = test_sampler.negative_sampling2(data.num_users, data.num_items, 
 test_combined = pd.concat([data.test, test_negative], axis=0).reset_index(drop=True)  # 合并正负样本
 test_feature = data.feature(test_combined)  # 将合并后的样本连接上用户和物品信息构成特征数据集
 
-# 生成用户id和物品id的one-hot向量
-# 先合并生成one-hot向量再拆分
-all_data = pd.concat([train_feature, valid_feature, test_feature], axis=0)
-all_data.drop('rating', axis=1, inplace=True)  # 去除评分数据
-all_data = pd.get_dummies(all_data, columns=['user_id', 'item_id']).astype(int)
-train_data = all_data.iloc[:train_feature.shape[0], :]
-valid_data = all_data.iloc[train_feature.shape[0]:train_feature.shape[0] + valid_feature.shape[0], :]
-test_data = all_data.iloc[
-            train_feature.shape[0] + valid_feature.shape[0]:train_feature.shape[0] + valid_feature.shape[0] +
-                                                            test_feature.shape[0], :]
-
 # 生成训练集、验证集、测试集的训练特征向量以及评分的torch
 train_rating = torch.tensor(train_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)  # 评分数据，用于计算损失
-train_data = torch.tensor(train_data.values, dtype=torch.float32).to(device)
+train_feature.drop('rating', axis=1, inplace=True)  # 去除评分数据
+train_data = torch.tensor(train_feature.values, dtype=torch.float32).to(device)
 valid_rating = torch.tensor(valid_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)
-valid_data = torch.tensor(valid_data.values, dtype=torch.float32).to(device)
+valid_feature.drop('rating', axis=1, inplace=True)
+valid_data = torch.tensor(valid_feature.values, dtype=torch.float32).to(device)
 test_rating = torch.tensor(test_feature.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)
-test_data = torch.tensor(test_data.values, dtype=torch.float32).to(device)
+test_feature.drop('rating', axis=1, inplace=True)
+test_data = torch.tensor(test_feature.values, dtype=torch.float32).to(device)
+print(train_data.shape)
 
 # 定义模型
-model = FFM(train_data.size(1), 32).to(device)
+model = FFM(train_data[:, 2:].size(1), 32).to(device)
 loss_fn = torch.nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
@@ -74,12 +67,30 @@ for epoch in range(epochs):
     trainer.model_eval(epoch)
 
 # 推荐部分
-k = 100
-real_list = data.itemid_matrix()
-user_item = data.user_item()
-user_item = pd.get_dummies(user_item, columns=['user_id', 'item_id']).astype(int)  # 将用户id和物品id one-hot化   运行慢
-roc_list = model.recommendation(data.num_users, user_item, k)  # 运行慢
-rank = Ranking(real_list, roc_list, k)
-rank.ranking_eval()
+roc_list = model.recommendation(data.num_users, data.user_item(), data.num_items)
+train_real = data.itemid_matrix(train_combined)
+valid_real = data.itemid_matrix(valid_combined)
+test_real = data.itemid_matrix(test_combined)
+k = 50
+# 验证集
+valid_roc = data.remove_itemid(roc_list, train_real)  # 去除训练集中的物品
+valid_roc = data.remove_itemid(valid_roc, test_real)  # 去除测试集中的物品
+valid_rank = Ranking(valid_real, valid_roc, k)
+print("验证集的指标：")
+valid_rank.ranking_eval()
+# 测试集
+test_roc = data.remove_itemid(roc_list, train_real)
+test_roc = data.remove_itemid(test_roc, valid_real)
+test_rank = Ranking(test_real, test_roc, k)
+print("测试集的指标：")
+test_rank.ranking_eval()
+
+# k = 100
+# real_list = data.itemid_matrix()
+# user_item = data.user_item()
+# user_item = pd.get_dummies(user_item, columns=['user_id', 'item_id']).astype(int)  # 将用户id和物品id one-hot化   运行慢
+# roc_list = model.recommendation(data.num_users, user_item, k)  # 运行慢
+# rank = Ranking(real_list, roc_list, k)
+# rank.ranking_eval()
 
 
