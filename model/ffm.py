@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn.init import xavier_normal_
+import numpy as np
 
 
 class FFM(nn.Module):
@@ -20,6 +21,12 @@ class FFM(nn.Module):
         self.itemid_user = nn.Embedding(1682, num_vector)
         self.itemid_item = nn.Embedding(1682, num_vector)
 
+        # 加入用户id和物品id进行逻辑回归
+        self.user = nn.Embedding(943, 1)
+        self.item = nn.Embedding(1682, 1)
+        # 特征向量参数w和b
+        self.linear = nn.Linear(num_feature, 1, True)
+
         # embedding初始化
         xavier_normal_(self.age_user.weight.data)
         xavier_normal_(self.age_item.weight.data)
@@ -33,25 +40,23 @@ class FFM(nn.Module):
         xavier_normal_(self.userid_item.weight.data)
         xavier_normal_(self.itemid_user.weight.data)
         xavier_normal_(self.itemid_item.weight.data)
-
-        # 特征向量参数w和b
-        self.linear = nn.Linear(num_feature, 1, True)
+        xavier_normal_(self.user.weight.data)
+        xavier_normal_(self.item.weight.data)
 
     def forward(self, feature_vector: torch.Tensor) -> torch.Tensor:
-        # userid:0-943,itemid:943-2625,age:2626,gender:2626-2628;occupation:2628-2649,movie:2649-2668
         # 特征交叉
-        age_user = torch.matmul(feature_vector[:, 2626].unsqueeze(1), self.age_user.weight)
-        age_item = torch.matmul(feature_vector[:, 2626].unsqueeze(1), self.age_item.weight)
-        gender_user = torch.matmul(feature_vector[:, 2626:2628], self.gender_user.weight)
-        gender_item = torch.matmul(feature_vector[:, 2626:2628], self.gender_item.weight)
-        occupation_user = torch.matmul(feature_vector[:, 2628:2649], self.occupation_user.weight)
-        occupation_item = torch.matmul(feature_vector[:, 2628:2649], self.occupation_item.weight)
-        movie_user = torch.matmul(feature_vector[:, 2649:2668], self.movie_user.weight)
-        movie_item = torch.matmul(feature_vector[:, 2649:2668], self.movie_item.weight)
-        userid_user = torch.matmul(feature_vector[:, 0:943], self.userid_user.weight)
-        userid_item = torch.matmul(feature_vector[:, 0:943], self.userid_item.weight)
-        itemid_user = torch.matmul(feature_vector[:, 943:2625], self.itemid_user.weight)
-        itemid_item = torch.matmul(feature_vector[:, 943:2625], self.itemid_item.weight)
+        age_user = torch.matmul(feature_vector[:, 2].unsqueeze(1), self.age_user.weight)
+        age_item = torch.matmul(feature_vector[:, 2].unsqueeze(1), self.age_item.weight)
+        gender_user = torch.matmul(feature_vector[:, 3:5], self.gender_user.weight)
+        gender_item = torch.matmul(feature_vector[:, 3:5], self.gender_item.weight)
+        occupation_user = torch.matmul(feature_vector[:, 5:26], self.occupation_user.weight)
+        occupation_item = torch.matmul(feature_vector[:, 5:26], self.occupation_item.weight)
+        movie_user = torch.matmul(feature_vector[:, 26:45], self.movie_user.weight)
+        movie_item = torch.matmul(feature_vector[:, 26:45], self.movie_item.weight)
+        userid_user = self.userid_user(feature_vector[:, 0].long())
+        userid_item = self.userid_item(feature_vector[:, 0].long())
+        itemid_user = self.itemid_user(feature_vector[:, 1].long())
+        itemid_item = self.itemid_item(feature_vector[:, 1].long())
 
         # 计算点积
         age_gender = torch.sum(age_user * gender_user, dim=1)
@@ -76,16 +81,18 @@ class FFM(nn.Module):
 
         feature_cross = age_gender + age_occupation + age_movie + age_userid + age_itemid + gender_occupation + gender_movie + gender_userid + gender_itemid + occupation_movie + occupation_userid + occupation_itemid + movie_userid + movie_itemid + userid_itemid
 
-        return torch.sigmoid(self.linear(feature_vector) + feature_cross.unsqueeze(1))
+        return torch.sigmoid(
+            self.user(feature_vector[:, 0].long()) + self.item(feature_vector[:, 1].long()) + self.linear(
+                feature_vector[:, 2:] + feature_cross.unsqueeze(1)))
 
     def recommendation(self, num_users, user_item, k):
         array = []
         device = next(self.parameters()).device
         for i in range(num_users):
-            user_vector = user_item.iloc[num_users * i:num_users * (i + 1), :]
+            user_vector = user_item[user_item['user_id'] == i]
             user_vector = torch.Tensor(user_vector.values).to(device)
             scores = self.forward(user_vector)
             values, indices = torch.topk(scores, k, dim=0)
             indices = indices.view(1, -1).tolist()[0]
             array.append(indices)
-        return array
+        return np.array(array)
