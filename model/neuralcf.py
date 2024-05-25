@@ -1,5 +1,7 @@
 import torch
+import numpy as np
 from torch import nn
+from torch.nn.init import xavier_normal_
 
 
 class NeuralCF(nn.Module):
@@ -10,6 +12,12 @@ class NeuralCF(nn.Module):
         self.GMF_Embedding_Item = nn.Embedding(num_item, mf_dim)
         self.MLP_Embedding_User = nn.Embedding(num_user, int(layers[0] / 2))
         self.MLP_Embedding_Item = nn.Embedding(num_item, int(layers[0] / 2))
+
+        # embedding初始化
+        xavier_normal_(self.GMF_Embedding_User.weight.data)
+        xavier_normal_(self.GMF_Embedding_Item.weight.data)
+        xavier_normal_(self.MLP_Embedding_User.weight.data)
+        xavier_normal_(self.MLP_Embedding_Item.weight.data)
 
         # 全连接网络
         self.dnn_network = nn.ModuleList(
@@ -50,7 +58,7 @@ class NeuralCF(nn.Module):
         output = self.sigmoid(linear)
         return output
 
-    def recommendation(self, num_users, num_items, k):
+    def recommendation(self, num_users, num_items):
         array = []
         # 获取模型参数所在的设备
         device = next(self.parameters()).device
@@ -58,8 +66,8 @@ class NeuralCF(nn.Module):
             user_vector = torch.full((num_items,), i).to(device)
             item_vector = torch.arange(num_items).to(device)
             scores = self.forward(user_vector, item_vector)
-            values, indices = torch.topk(scores, k, dim=0)
+            values, indices = torch.topk(scores, num_items, dim=0)
             indices = indices.view(-1).tolist()
             array.append(indices)
-        return array
+        return np.array(array)
 
