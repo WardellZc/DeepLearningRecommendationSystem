@@ -1,4 +1,5 @@
 import torch.nn
+import pandas as pd
 from torch import optim
 
 import sys
@@ -62,7 +63,7 @@ optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
 # 训练模型
 trainer = Trainer(model, loss_fn, optimizer)
-epochs = 100
+epochs = 50
 for epoch in range(epochs):
     trainer.train_loop(train_users_combined, train_items_combined, train_rating=train_ratings_combined)
     trainer.valid_loop(valid_users_combined, valid_items_combined, valid_rating=valid_ratings_combined)
@@ -71,9 +72,30 @@ for epoch in range(epochs):
 
 
 # 推荐部分
-k = 100
-real_list = data.itemid_matrix()
-roc_list = model.recommendation(data.num_users, data.num_items, k)  # 得到推荐列表矩阵，每一个行代表给每个用户推荐的物品id
-rank = Ranking(real_list, roc_list, k)
-rank.ranking_eval()
+train_df = pd.DataFrame({'user_id': train_users_combined.cpu().numpy(), 'item_id': train_items_combined.cpu().numpy()})
+valid_df = pd.DataFrame({'user_id': valid_users_combined.cpu().numpy(), 'item_id': valid_items_combined.cpu().numpy()})
+test_df = pd.DataFrame({'user_id': test_users_combined.cpu().numpy(), 'item_id': test_items_combined.cpu().numpy()})
+roc_list = model.recommendation(data.num_users, data.num_items)
+train_real = data.itemid_matrix(train_df)
+valid_real = data.itemid_matrix(valid_df)
+test_real = data.itemid_matrix(test_df)
+k = 50
+# 验证集
+valid_roc = data.remove_itemid(roc_list, train_real)  # 去除训练集中的物品
+valid_roc = data.remove_itemid(valid_roc, test_real)  # 去除测试集中的物品
+valid_rank = Ranking(valid_real, valid_roc, k)
+print("验证集的指标：")
+valid_rank.ranking_eval()
+# 测试集
+test_roc = data.remove_itemid(roc_list, train_real)
+test_roc = data.remove_itemid(test_roc, valid_real)
+test_rank = Ranking(test_real, test_roc, k)
+print("测试集的指标：")
+test_rank.ranking_eval()
+
+# k = 100
+# real_list = data.itemid_matrix()
+# roc_list = model.recommendation(data.num_users, data.num_items, k)  # 得到推荐列表矩阵，每一个行代表给每个用户推荐的物品id
+# rank = Ranking(real_list, roc_list, k)
+# rank.ranking_eval()
 
