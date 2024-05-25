@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn.init import xavier_normal_
+import numpy as np
 
 
 # 自定义一个残差块
@@ -87,4 +88,5 @@ class DeepCrossing(nn.Module):
             values, indices = torch.topk(scores, k, dim=0)
             indices = indices.view(1, -1).tolist()[0]
             array.append(indices)
-        return array
+        return np.array(array)
+
