@@ -64,10 +64,28 @@ for epoch in range(epochs):
     trainer.model_eval(epoch)
 
 # 推荐部分
-k = 100
-real_list = data.itemid_matrix()
-roc_list = model.recommendation(data.num_users, data.user_item(), k)
-rank = Ranking(real_list, roc_list, k)
-rank.ranking_eval()
+roc_list = model.recommendation(data.num_users, data.user_item(), data.num_items)
+train_real = data.itemid_matrix(train_combined)
+valid_real = data.itemid_matrix(valid_combined)
+test_real = data.itemid_matrix(test_combined)
+k = 50
+# 验证集
+valid_roc = data.remove_itemid(roc_list, train_real)  # 去除训练集中的物品
+valid_roc = data.remove_itemid(valid_roc, test_real)  # 去除测试集中的物品
+valid_rank = Ranking(valid_real, valid_roc, k)
+print("验证集的指标：")
+valid_rank.ranking_eval()
+# 测试集
+test_roc = data.remove_itemid(roc_list, train_real)
+test_roc = data.remove_itemid(test_roc, valid_real)
+test_rank = Ranking(test_real, test_roc, k)
+print("测试集的指标：")
+test_rank.ranking_eval()
+
+# k = 100
+# real_list = data.itemid_matrix()
+# roc_list = model.recommendation(data.num_users, data.user_item(), k)
+# rank = Ranking(real_list, roc_list, k)
+# rank.ranking_eval()
 
 
