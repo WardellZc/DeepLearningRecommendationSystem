@@ -25,11 +25,11 @@ class MatrixFactorization(nn.Module):
         item_embedding = self.item_embeddings(item_indices)
         return torch.sigmoid(torch.sum(torch.multiply(user_embedding, item_embedding), dim=1))
 
-    def recommendation(self, num_users, num_items, k):
+    def recommendation(self, num_users, num_items):
         # 获取模型参数所在设备
         device = next(self.user_embeddings.parameters()).device
         user_vector = self.user_embeddings(torch.arange(num_users).to(device))
         item_vector = self.item_embeddings(torch.arange(num_items).to(device))
         ratings_matrix = torch.matmul(user_vector, item_vector.T)
-        values, indices = torch.topk(ratings_matrix, k, dim=1)
+        values, indices = torch.topk(ratings_matrix, num_items, dim=1)
         return indices.cpu().numpy()
