@@ -58,12 +58,29 @@ for epoch in range(epochs):
     trainer.model_eval(epoch)
 
 # 推荐部分
-k = 100
-real_list = data.itemid_matrix()
+real_list = data.itemid_matrix(combined)
+train_valid_real, test_real = train_test_split(real_list, test_size=0.2, random_state=42)
+train_real, valid_real = train_test_split(train_valid_real, test_size=0.25, random_state=42)
 rating_matrix = torch.tensor(rating_matrix.values, dtype=torch.float32).to(device)
-roc_list = model.recommendation(rating_matrix, k)
-rank = Ranking(real_list, roc_list, k)
-rank.ranking_eval()
+roc_list = model.recommendation(rating_matrix, data.num_items)
+train_valid_roc, test_roc = train_test_split(roc_list, test_size=0.2, random_state=42)
+train_roc, valid_roc = train_test_split(train_valid_roc, test_size=0.25, random_state=42)
+k = 50
+# 验证集
+valid_rank = Ranking(valid_real, valid_roc, k)
+print("验证集的指标：")
+valid_rank.ranking_eval()
+# 测试集
+test_rank = Ranking(test_real, test_roc, k)
+print("测试集的指标：")
+test_rank.ranking_eval()
+
+# k = 100
+# real_list = data.itemid_matrix()
+# rating_matrix = torch.tensor(rating_matrix.values, dtype=torch.float32).to(device)
+# roc_list = model.recommendation(rating_matrix, k)
+# rank = Ranking(real_list, roc_list, k)
+# rank.ranking_eval()
 
 
 
