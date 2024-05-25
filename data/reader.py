@@ -5,6 +5,7 @@
 import random
 from typing import Tuple
 
+import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import MinMaxScaler
@@ -83,10 +84,11 @@ class MovieLens100K:
         user_item = pd.merge(user_item, self.item_data, on='item_id')
         return user_item
 
-    # 得到每个用户评过分的物品id矩阵
-    def itemid_matrix(self):
+    # 得到每个用户评过分的物品id矩阵(要保证输入的数据包含所有用户，不然索引与用户id对应会出错)
+    @staticmethod
+    def itemid_matrix(data):
         # 1. 导入数据
-        df = self.data
+        df = data
 
         # 2. 生成每个用户评过分的物品ID列表
         user_item_dict = df.groupby('user_id')['item_id'].apply(list).to_dict()
@@ -96,7 +98,35 @@ class MovieLens100K:
 
         # 4. 将结果转换成矩阵形式
         user_item_matrix = [user_item_dict[user_id] for user_id in user_ids]
-        return user_item_matrix
 
+        # 将矩阵numpy化加快运行速度
+        max_len = max(len(lst) for lst in user_item_matrix)  # 找到最长的子列表的长度
+        padded_matrix = np.array([lst + [-1] * (max_len - len(lst)) for lst in user_item_matrix])  # 使用填充值 -1 填充每个子列表，使其具有相同的长度
+        return padded_matrix
+
+    # 从推荐列表中去除另外两个数据集中已经交互过的物品(保证两个矩阵具有相同行书，即用户数)
+    @staticmethod
+    def remove_itemid(recommendation_matrix, other_matrix):
+        filtered_recommendations = []
+        num_users, num_recommendations = recommendation_matrix.shape
+
+        for user_id in range(num_users):
+            recommendations = recommendation_matrix[user_id]
+            train_interactions = other_matrix[user_id]
+
+            # 移除无效的交互项（假设用 -1 作为填充值）
+            train_interactions = train_interactions[train_interactions >= 0]
+
+            # 使用集合进行快速查找
+            train_interactions_set = set(train_interactions)
+
+            filtered_list = [item for item in recommendations if item not in train_interactions_set]
+            filtered_recommendations.append(filtered_list)
+
+        # 将矩阵numpy化加快运行速度
+        max_len = max(len(lst) for lst in filtered_recommendations)  # 找到最长的子列表的长度
+        padded_matrix = np.array([lst + [-1] * (max_len - len(lst)) for lst in filtered_recommendations])  # 使用填充值 -1 填充每个子列表，使其具有相同的长度
+
+        return padded_matrix
 
 
