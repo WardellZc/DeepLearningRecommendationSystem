@@ -4,6 +4,7 @@
 # @File    : mf.py
 
 import torch.nn
+import pandas as pd
 from torch import optim
 
 import sys
@@ -18,7 +19,6 @@ from evaluator.ranking import Ranking
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 data = MovieLens100K('../dataset_example/ml-100k')
-
 
 # 读取数据
 train_user, train_item, train_rating = data.train_interaction(device=device)
@@ -75,10 +75,29 @@ for epoch in range(epochs):
     trainer.model_eval(epoch)
 
 # 推荐部分
-k = 100
-real_list = data.itemid_matrix()
-roc_list = model.recommendation(data.num_users, data.num_items, k)
-rank = Ranking(real_list, roc_list, k)
-rank.ranking_eval()
+train_df = pd.DataFrame({'user_id': train_users_combined.cpu().numpy(), 'item_id': train_items_combined.cpu().numpy()})
+valid_df = pd.DataFrame({'user_id': valid_users_combined.cpu().numpy(), 'item_id': valid_items_combined.cpu().numpy()})
+test_df = pd.DataFrame({'user_id': test_users_combined.cpu().numpy(), 'item_id': test_items_combined.cpu().numpy()})
+roc_list = model.recommendation(data.num_users, data.num_items)
+train_real = data.itemid_matrix(train_df)
+valid_real = data.itemid_matrix(valid_df)
+test_real = data.itemid_matrix(test_df)
+k = 50
+# 验证集
+valid_roc = data.remove_itemid(roc_list, train_real)  # 去除训练集中的物品
+valid_roc = data.remove_itemid(valid_roc, test_real)  # 去除测试集中的物品
+valid_rank = Ranking(valid_real, valid_roc, k)
+print("验证集的指标：")
+valid_rank.ranking_eval()
+# 测试集
+test_roc = data.remove_itemid(roc_list, train_real)
+test_roc = data.remove_itemid(test_roc, valid_real)
+test_rank = Ranking(test_real, test_roc, k)
+print("测试集的指标：")
+test_rank.ranking_eval()
 
-
+# k = 100
+# real_list = data.itemid_matrix()
+# roc_list = model.recommendation(data.num_users, data.num_items, k)
+# rank = Ranking(real_list, roc_list, k)
+# rank.ranking_eval()
