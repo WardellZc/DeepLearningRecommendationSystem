@@ -39,7 +39,7 @@ class ProductLayers(nn.Module):
         """
         super().__init__()
         self.model = model
-        # 将乘线性操作部分的结果转化为DNN输入维度的向量
+        # 将线性操作部分的结果转化为DNN输入维度的向量
         self.linear1 = nn.Linear(num_feature * embed_dim, hidden_units[0])
         # 将乘积操作部分的结果转化为DNN输入维度的向量
         if self.model == "in":
