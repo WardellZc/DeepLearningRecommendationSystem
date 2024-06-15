@@ -58,7 +58,7 @@ for epoch in range(epochs):
     trainer.model_eval(epoch)
 
 # 推荐部分
-real_list = data.itemid_matrix(combined)
+real_list = data.itemid_matrix(data.data)
 train_valid_real, test_real = train_test_split(real_list, test_size=0.2, random_state=42)
 train_real, valid_real = train_test_split(train_valid_real, test_size=0.25, random_state=42)
 rating_matrix = torch.tensor(rating_matrix.values, dtype=torch.float32).to(device)

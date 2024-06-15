@@ -44,12 +44,39 @@ class MovieLens100K:
         self.data['rating'] = 1
 
         # 将数据集划分为训练集、验证集、测试集
-        self.data = self.data.sample(frac=1).reset_index(drop=True)  # 打乱数据
-        train_size = int(len(self.data) * 0.6)  # 计算分割点
-        valid_size = int(len(self.data) * 0.2)
-        self.train = self.data[:train_size]
-        self.valid = self.data[train_size:train_size + valid_size]
-        self.test = self.data[train_size + valid_size:]
+        # self.data = self.data.sample(frac=1).reset_index(drop=True)  # 打乱数据
+        # train_size = int(len(self.data) * 0.6)  # 计算分割点
+        # valid_size = int(len(self.data) * 0.2)
+        # self.train = self.data[:train_size]
+        # self.valid = self.data[train_size:train_size + valid_size]
+        # self.test = self.data[train_size + valid_size:]
+        def split_user_data(ratings, train_ratio=0.6, valid_ratio=0.2):
+            # 按用户分组
+            user_grouped = ratings.groupby('user_id')
+
+            train_list = []
+            valid_list = []
+            test_list = []
+
+            for user_id, group in user_grouped:
+                # 打乱用户的记录
+                group = group.sample(frac=1).reset_index(drop=True)
+                n = len(group)
+                train_end = int(n * train_ratio)
+                valid_end = train_end + int(n * valid_ratio)
+
+                # 划分数据集
+                train_list.append(group.iloc[:train_end])
+                valid_list.append(group.iloc[train_end:valid_end])
+                test_list.append(group.iloc[valid_end:])
+
+            train = pd.concat(train_list).reset_index(drop=True)
+            valid = pd.concat(valid_list).reset_index(drop=True)
+            test = pd.concat(test_list).reset_index(drop=True)
+
+            return train, valid, test
+
+        self.train, self.valid, self.test = split_user_data(self.data)
 
     @staticmethod
     def _interaction(data, device: str = 'cpu') -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -101,10 +128,11 @@ class MovieLens100K:
 
         # 将矩阵numpy化加快运行速度
         max_len = max(len(lst) for lst in user_item_matrix)  # 找到最长的子列表的长度
-        padded_matrix = np.array([lst + [-1] * (max_len - len(lst)) for lst in user_item_matrix])  # 使用填充值 -1 填充每个子列表，使其具有相同的长度
+        padded_matrix = np.array(
+            [lst + [-1] * (max_len - len(lst)) for lst in user_item_matrix])  # 使用填充值 -1 填充每个子列表，使其具有相同的长度
         return padded_matrix
 
-    # 从推荐列表中去除另外两个数据集中已经交互过的物品(保证两个矩阵具有相同行书，即用户数)
+    # 从推荐列表中去除另外两个数据集中已经交互过的物品(保证两个矩阵具有相同行数`，即用户数)
     @staticmethod
     def remove_itemid(recommendation_matrix, other_matrix):
         filtered_recommendations = []
@@ -125,8 +153,13 @@ class MovieLens100K:
 
         # 将矩阵numpy化加快运行速度
         max_len = max(len(lst) for lst in filtered_recommendations)  # 找到最长的子列表的长度
-        padded_matrix = np.array([lst + [-1] * (max_len - len(lst)) for lst in filtered_recommendations])  # 使用填充值 -1 填充每个子列表，使其具有相同的长度
+        padded_matrix = np.array(
+            [lst + [-1] * (max_len - len(lst)) for lst in filtered_recommendations])  # 使用填充值 -1 填充每个子列表，使其具有相同的长度
 
         return padded_matrix
 
 
+# data = MovieLens100K('../dataset_example/ml-100k')
+# print("训练集用户个数：", len(data.train['user_id'].unique()))
+# print("验证集用户个数：", len(data.valid['user_id'].unique()))
+# print("测试集用户个数：", len(data.test['user_id'].unique()))

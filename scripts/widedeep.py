@@ -65,9 +65,12 @@ for epoch in range(epochs):
 
 # 推荐部分
 roc_list = model.recommendation(data.num_users, data.user_item(), data.num_items)
-train_real = data.itemid_matrix(train_combined)
-valid_real = data.itemid_matrix(valid_combined)
-test_real = data.itemid_matrix(test_combined)
+# train_real = data.itemid_matrix(train_combined)
+# valid_real = data.itemid_matrix(valid_combined)
+# test_real = data.itemid_matrix(test_combined)
+train_real = data.itemid_matrix(data.train)
+valid_real = data.itemid_matrix(data.valid)
+test_real = data.itemid_matrix(data.test)
 k = 50
 # 验证集
 valid_roc = data.remove_itemid(roc_list, train_real)  # 去除训练集中的物品

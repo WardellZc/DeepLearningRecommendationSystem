@@ -72,9 +72,9 @@ for epoch in range(epochs):
 
 
 # 推荐部分
-train_df = pd.DataFrame({'user_id': train_users_combined.cpu().numpy(), 'item_id': train_items_combined.cpu().numpy()})
-valid_df = pd.DataFrame({'user_id': valid_users_combined.cpu().numpy(), 'item_id': valid_items_combined.cpu().numpy()})
-test_df = pd.DataFrame({'user_id': test_users_combined.cpu().numpy(), 'item_id': test_items_combined.cpu().numpy()})
+train_df = pd.DataFrame({'user_id': train_user.cpu().numpy(), 'item_id': train_item.cpu().numpy()})
+valid_df = pd.DataFrame({'user_id': valid_user.cpu().numpy(), 'item_id': valid_item.cpu().numpy()})
+test_df = pd.DataFrame({'user_id': test_user.cpu().numpy(), 'item_id': test_item.cpu().numpy()})
 roc_list = model.recommendation(data.num_users, data.num_items)
 train_real = data.itemid_matrix(train_df)
 valid_real = data.itemid_matrix(valid_df)
