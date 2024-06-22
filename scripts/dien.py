@@ -8,7 +8,7 @@ import sys
 sys.path.append('../')
 
 from data.reader import MovieLens100K
-from model.din import DIN
+from model.dien import DIEN
 from sampler.sampler import Sampler
 from trainer.trainer import Trainer
 from evaluator.ranking import Ranking
@@ -57,7 +57,6 @@ train_hist_list = np.array([row[row != -1] for row in train_hist_list],
                            dtype=object)  # 历史行为列表在生成时为了加快速度，转化为了numpy数组，用-1填补了空缺，现在要去掉
 train_combined['history_list'] = train_combined['user_id'].apply(lambda x: train_hist_list[x])  # 将历史行为列表加入评分数据集
 train_combined['history_list'] = train_combined['history_list'].apply(lambda x: pad_or_truncate(x, hist_len))
-print(train_combined)
 train_hist = torch.tensor(np.array(train_combined['history_list'].tolist()), dtype=torch.long).to(device)
 train_target_item = torch.tensor(train_combined.iloc[:, 1].values, dtype=torch.long).to(device)
 train_rating = torch.tensor(train_combined.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)  # 评分数据，用于计算损失
@@ -82,7 +81,7 @@ test_target_item = torch.tensor(test_combined.iloc[:, 1].values, dtype=torch.lon
 test_rating = torch.tensor(test_combined.iloc[:, 2].values, dtype=torch.float32).unsqueeze(1).to(device)
 
 # 定义模型
-model = DIN(data.num_items, 64).to(device)
+model = DIEN(data.num_items, 16).to(device)
 loss_fn = torch.nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 

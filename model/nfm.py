@@ -11,6 +11,7 @@ class NFM(nn.Module):
         # Embeddings
         self.user_embedding = nn.Embedding(num_users, embedding_dim)
         self.item_embedding = nn.Embedding(num_items, embedding_dim)
+        self.age_embedding = nn.Embedding(1, embedding_dim)
         self.gender_embedding = nn.Embedding(2, embedding_dim)
         self.occupation_embedding = nn.Embedding(21, embedding_dim)
         self.movie_embedding = nn.Embedding(19, embedding_dim)
@@ -32,6 +33,7 @@ class NFM(nn.Module):
         # embedding初始化
         xavier_normal_(self.user_embedding.weight.data)
         xavier_normal_(self.item_embedding.weight.data)
+        xavier_normal_(self.age_embedding.weight.data)
         xavier_normal_(self.gender_embedding.weight.data)
         xavier_normal_(self.occupation_embedding.weight.data)
         xavier_normal_(self.movie_embedding.weight.data)
@@ -42,7 +44,8 @@ class NFM(nn.Module):
         # Embeddings
         user_embed = self.user_embedding(x[:, 0].long())
         item_embed = self.item_embedding(x[:, 1].long())
-        age = x[:, 2].unsqueeze(1)
+        age_embed = torch.matmul(x[:, 2].unsqueeze(1), self.age_embedding.weight)
+        # age = x[:, 2].unsqueeze(1)
         gender_embed = torch.matmul(x[:, 3:5], self.gender_embedding.weight)
         occupation_embed = torch.matmul(x[:, 5:26], self.occupation_embedding.weight)
         movie_embed = torch.matmul(x[:, 26:45], self.movie_embedding.weight)
@@ -51,8 +54,8 @@ class NFM(nn.Module):
         wide_output = self.user(x[:, 0].long()) + self.item(x[:, 1].long()) + self.wide(x[:, 2:])
 
         # 特征交叉部分
-        age = age.expand(-1, user_embed.size(1))  # 将年龄进行广播，与embedding向量维度保持一致，以进行内积运算
-        feature_list = [user_embed, item_embed, age, gender_embed, occupation_embed, movie_embed]
+        # age = age.expand(-1, user_embed.size(1))  # 将年龄进行广播，与embedding向量维度保持一致，以进行内积运算
+        feature_list = [user_embed, item_embed, age_embed, gender_embed, occupation_embed, movie_embed]
         cross_sum = 0.0
         for i in range(len(feature_list)):
             for j in range(i + 1, len(feature_list)):
